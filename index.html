@@ -1,0 +1,354 @@
+
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>.</title>
+
+  <style>
+    :root{
+      --bg: #000;
+      --fg: #fff;
+      --muted: rgba(255,255,255,0.72);
+      --dim: rgba(255,255,255,0.35);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body{
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      overflow: hidden;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      letter-spacing: 0.02em;
+    }
+
+    /* Sharp background video (no blur / glass) */
+    .video-bg{
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: -2;
+      filter: none; /* keep sharp */
+      transform: translateZ(0);
+    }
+
+    /* Optional: subtle darkening WITHOUT blur */
+    .shade{
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background:
+        radial-gradient(800px 500px at 50% 40%, rgba(0,0,0,0.10), rgba(0,0,0,0.55) 65%, rgba(0,0,0,0.80)),
+        linear-gradient(180deg, rgba(0,0,0,0.15), rgba(0,0,0,0.65));
+      pointer-events: none;
+    }
+
+    /* Layout */
+    .stage{
+      height: 100%;
+      width: 100%;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .wrap{
+      width: min(920px, 94vw);
+      display: grid;
+      gap: 14px;
+      align-items: center;
+      justify-items: center;
+    }
+
+    /* Loading bar: white line on black */
+    .bar{
+      width: min(720px, 92vw);
+      height: 10px;
+      background: rgba(0,0,0,0.88);
+      border: 1px solid rgba(255,255,255,0.35);
+      position: relative;
+      overflow: hidden;
+    }
+    .fill{
+      height: 100%;
+      width: 0%;
+      background: #fff;
+      transform: translateZ(0);
+    }
+
+    /* tiny “scan” flicker line */
+    .scan{
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 18%;
+      left: -25%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.65), transparent);
+      opacity: 0.25;
+      animation: scan 1.1s linear infinite;
+      pointer-events: none;
+    }
+    @keyframes scan{
+      0%{ transform: translateX(0); }
+      100%{ transform: translateX(820%); }
+    }
+
+    /* Status log under the bar */
+    .log{
+      width: min(720px, 92vw);
+      min-height: 64px;
+      padding: 0;
+      margin: 0;
+      list-style: none;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+      text-transform: lowercase;
+      user-select: none;
+    }
+    .log li{
+      opacity: 0;
+      transform: translateY(2px);
+      animation: lineIn 220ms ease-out forwards;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    @keyframes lineIn{
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Final message */
+    .result{
+      display: none;
+      width: min(920px, 94vw);
+      text-align: center;
+      user-select: none;
+    }
+    .chosen{
+      font-size: clamp(18px, 3.1vw, 36px);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      text-shadow: 0 0 18px rgba(255,255,255,0.14);
+      margin: 0 0 14px;
+      position: relative;
+    }
+
+    /* subtle glitch flicker */
+    .chosen::after{
+      content: attr(data-text);
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      color: rgba(255,255,255,0.55);
+      clip-path: inset(0 0 0 0);
+      opacity: 0;
+      animation: glitch 2.2s infinite;
+      pointer-events: none;
+    }
+    @keyframes glitch{
+      0%, 85%, 100% { opacity: 0; transform: translate(0,0); }
+      86% { opacity: 0.65; transform: translate(1px,-1px); clip-path: inset(10% 0 72% 0); }
+      89% { opacity: 0.45; transform: translate(-1px,1px); clip-path: inset(55% 0 22% 0); }
+      92% { opacity: 0.55; transform: translate(2px,0px); clip-path: inset(30% 0 45% 0); }
+    }
+
+    .actions{
+      display: none;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .btn{
+      min-width: 240px;
+      padding: 14px 16px;
+      background: rgba(0,0,0,0.86);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.55);
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-weight: 700;
+      transition: background 140ms ease, color 140ms ease, transform 140ms ease, border-color 140ms ease;
+    }
+    .btn:hover{
+      background: #fff;
+      color: #000;
+      border-color: #fff;
+      transform: translateY(-1px);
+    }
+    .btn:active{ transform: translateY(0); }
+
+    @media (max-width: 560px){
+      .btn{ min-width: 100%; }
+      .log li{ white-space: normal; }
+    }
+  </style>
+</head>
+
+<body>
+  <video class="video-bg" autoplay loop muted playsinline preload="auto" poster="fallback.jpg">
+    <source src="background.mp4" type="video/mp4" />
+  </video>
+  <div class="shade" aria-hidden="true"></div>
+
+  <div class="stage">
+    <!-- BOOT SCREEN -->
+    <div class="wrap" id="boot">
+      <div class="bar" aria-label="loading">
+        <div class="fill" id="fill"></div>
+        <div class="scan" aria-hidden="true"></div>
+      </div>
+
+      <ul class="log" id="log" aria-label="status log"></ul>
+    </div>
+
+    <!-- RESULT SCREEN -->
+    <div class="result" id="result">
+      <p class="chosen" id="chosen" data-text="">
+        Your position has been chosen: <span id="agent">Agent 01</span>
+      </p>
+
+      <div class="actions" id="actions">
+        <button class="btn" id="beginBtn">MISSION BEGINNEN</button>
+        <button class="btn" id="cancelBtn">ABBRECHEN</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ====== Boot / Hacking loading with irregular progress + irregular logs ======
+
+    const fill = document.getElementById("fill");
+    const logEl = document.getElementById("log");
+    const boot = document.getElementById("boot");
+    const result = document.getElementById("result");
+    const actions = document.getElementById("actions");
+    const chosen = document.getElementById("chosen");
+    const agent = document.getElementById("agent");
+
+    // Agent number 1-50
+    const agentNumber = Math.floor(Math.random() * 50) + 1;
+    const agentNumberPadded = String(agentNumber).padStart(2, "0");
+    agent.textContent = `Agent ${agentNumberPadded}`;
+    chosen.setAttribute("data-text", `Your position has been chosen: Agent ${agentNumberPadded}`);
+
+    // Status messages (lowercase vibe)
+    const messages = [
+      "connecting with smartphone…",
+      "handshake established…",
+      "syncing device identifiers…",
+      "reading sensor telemetry…",
+      "analyzing personal data…",
+      "extracting behavioral patterns…",
+      "finding qualities…",
+      "mapping social graph…",
+      "predictive model: warm start…",
+      "finding future scenarios…",
+      "risk profile compiled…",
+      "verifying signal integrity…",
+      "decrypting local cache…",
+      "generating agent slot…",
+      "finalizing assignment…"
+    ];
+
+    // Helpers
+    function rand(min, max){ return Math.random() * (max - min) + min; }
+    function pick(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
+
+    function pushLogLine(text){
+      const li = document.createElement("li");
+      li.textContent = text;
+      logEl.appendChild(li);
+
+      // keep only last ~6 lines
+      while (logEl.children.length > 6) logEl.removeChild(logEl.firstChild);
+    }
+
+    // Irregular progress: longer + jittery
+    let progress = 0;
+    let msgIndex = 0;
+    let done = false;
+
+    // Make it feel longer: minimum duration approx 9–16 seconds depending on randomness
+    function step(){
+      if (done) return;
+
+      // occasional "stall"
+      const stall = Math.random() < 0.12;
+      const delay = stall ? rand(450, 1200) : rand(120, 520);
+
+      setTimeout(() => {
+        if (done) return;
+
+        // irregular increments; near the end: smaller increments
+        const nearEnd = progress > 85;
+        const inc = nearEnd ? rand(0.2, 1.4) : rand(0.6, 3.8);
+
+        // sometimes a tiny jump
+        const jump = Math.random() < 0.07 ? rand(2.5, 6.5) : 0;
+
+        progress = Math.min(100, progress + inc + jump);
+        fill.style.width = progress.toFixed(2) + "%";
+
+        // irregular log lines
+        const shouldLog = Math.random() < (stall ? 0.95 : 0.55);
+        if (shouldLog){
+          // rotate through messages but with some randomness
+          const base = messages[Math.min(msgIndex, messages.length - 1)];
+          const noisy = Math.random() < 0.18 ? pick(messages) : base;
+          pushLogLine(noisy);
+          if (msgIndex < messages.length - 1 && Math.random() < 0.75) msgIndex++;
+        }
+
+        if (progress >= 100){
+          done = true;
+          finish();
+          return;
+        }
+
+        step();
+      }, delay);
+    }
+
+    function finish(){
+      // small final flicker lines
+      pushLogLine("complete.");
+      setTimeout(() => {
+        boot.style.display = "none";
+        result.style.display = "block";
+
+        // show buttons after 2 seconds
+        setTimeout(() => {
+          actions.style.display = "flex";
+        }, 2000);
+      }, 350);
+    }
+
+    // Start: show some immediate log noise
+    pushLogLine("boot sequence initiated…");
+    setTimeout(() => pushLogLine("allocating memory…"), rand(120, 420));
+    setTimeout(() => pushLogLine("initializing modules…"), rand(240, 680));
+
+    step();
+
+    // Button actions (placeholder)
+    document.getElementById("beginBtn").addEventListener("click", () => {
+      alert(`MISSION START — ${agent.textContent}`);
+      // window.location.href = "mission.html";
+    });
+
+    document.getElementById("cancelBtn").addEventListener("click", () => {
+      alert("MISSION ABORTED");
+      // window.history.back();
+    });
+  </script>
+</body>
+</html>
